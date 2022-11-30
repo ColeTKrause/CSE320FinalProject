@@ -1,0 +1,223 @@
+`timescale 1ns / 1ps
+
+// state variables
+`define S0 3'b000
+`define S1 3'b001
+`define S2 3'b010
+`define S3 3'b100
+`define S4 3'b101
+// Roll Counter
+// Should continuously run with CLK
+module Counter(
+    input CLK,
+    output [2:0] DiceOut
+);
+    
+    // internal vars
+    reg [2:0] counter;
+    always @(posedge CLK)
+    begin
+        if(counter == 3'b110)
+        begin
+            counter = 3'b001;
+        end
+        else
+        begin
+            counter = counter + 3'b001;
+        end
+    end
+    
+    // assignment
+    assign DiceOut = counter;
+endmodule
+
+// Output display
+module SevenSegDisplay(
+    input CLK,
+    input reset,
+    input Win, 
+    input Lose,
+    input Roll,
+    input[2:0] Diceout1,
+    input[2:0] Diceout2,
+    output reg[7:0] Anode = 8'b11111111,
+    output reg[6:0] Cathode
+);
+    
+endmodule
+
+// State logic for Win, Lose, NS, PS
+module DiceGame(
+    input CLK,
+    input reset,
+    input Rb1,
+    input Rb2,
+    input [2:0] cntr1,
+    input [2:0] cntr2,
+    output Win,
+    output Lose,
+    output Roll,
+    output [2:0] DiceOut1, // Not Sure if should be Reg
+    output [2:0] DiceOut2 // Not Sure if should be reg
+    );
+    
+    // internal registers for state
+    reg [2:0] PS;
+    reg [2:0] NS;
+    
+    wire [3:0] sum;
+    reg [3:0] prev_sum;
+    reg [3:0] trials;
+    reg [3:0] current_trial;
+    
+    // Dice Out for Seven Segment Display
+    assign DiceOut1 = cntr1;
+    assign DiceOut2 = cntr2;
+    
+    // Signals to determine state
+    assign sum = cntr1 + cntr2;
+    
+    // State Update
+    always @(posedge CLK)
+    begin
+        if(reset == 1'b1)
+        begin
+            PS <= `S0;
+            trials <= 1; // Starting number of Trials
+            current_trial <= 1; // Starting Trial number
+        end
+        else
+        begin
+            PS <= NS;
+        end
+    end
+
+    // Next State Calculation
+    always @(*)
+    begin
+    
+    
+    case(PS)
+        `S0:
+            begin
+                if(Rb1 == 1'b1)
+                begin
+                    NS = `S1;
+                end
+                else
+                begin
+                    NS = `S0;
+                end
+            end
+            
+        `S1:
+            begin
+                if(Rb2 == 1'b1)
+                begin
+                    NS = `S2;
+                end
+                else
+                begin
+                    NS = `S1;
+                end
+            end
+            
+        `S2:
+            begin
+                // First Roll Win
+                if(trials == 1 && (sum == 7 || sum == 11))
+                begin
+                    NS = `S3;
+                end // First Roll Lose
+                else if(trials == 1 && (sum ==2 || sum == 3 || sum == 12)) 
+                begin
+                    NS = `S4;
+                end // First Roll Other 
+                else if(trials == 1)
+                begin
+                    trials = sum;
+                    current_trial = sum;
+                    prev_sum = sum; 
+                    NS = `S0;
+                end  // Subsequent Roll, WIN
+                else if(trials != 1 && sum == prev_sum)
+                begin
+                    NS = `S3;
+                end // subsequent roll current sum equals 7, LOSE
+                else if(trials != 1 && sum == 7)
+                begin
+                    NS = `S4;
+                end // subsequent roll other
+                else if(current_trial != 0) 
+                begin
+                    current_trial = current_trial - 1;
+                    prev_sum = sum;
+                    NS = `S0;
+                end
+                else // Out of rolls, LOSE
+                begin
+                    NS = `S4;
+                end
+           
+            end
+            
+        `S3:
+            begin
+                if(reset == 1)
+                begin
+                    NS = `S0;
+                end
+                else
+                begin
+                    NS = `S3;
+                end
+            end
+            
+        `S4:
+            begin
+                if(reset == 1)
+                begin
+                    NS = `S0;
+                end
+                else
+                begin
+                    NS = `S4;
+                end
+            end
+        default:
+            begin
+            end
+    endcase
+            
+            
+    
+    end
+endmodule
+
+
+
+
+// Outer encompassing module
+module Main(
+    input Rb1,
+    input Rb2,
+    input reset,
+    output [7:0] Anode,
+    output [6:0] Cathode
+);
+    wire CLK;
+    wire [2:0] cntr1;
+    wire [2:0] cntr2;
+    wire Win;
+    wire Lose;
+    wire Roll;
+    wire DiceOut1;
+    wire Diceout2;
+    
+    Counter counter1(.CLK(CLK), .CounterOut(cntr1));
+    Counter counter2(.CLK(CLK), .CounterOut(cntr2));
+    DiceGame dicegame(.CLK(CLK), .reset(reset), .Rb1(Rb1), .Rb2(Rb2), .cntr1(cntr1), .cntr2(cntr2), .Win(Win), .Lose(Lose), .Roll(Roll), .DiceOut1(DiceOut1), .DiceOut2(DiceOut2));
+    
+    
+    
+endmodule
